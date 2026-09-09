@@ -71,8 +71,6 @@ public class PlayerController : MonoBehaviour
             MoveCharacter(_moveInput);
 
         UpdateBodyVisual();
-
-        Debug.Log($"{_groundNormal}");
     }
 
     private void OnJumpPerformed(InputAction.CallbackContext context)

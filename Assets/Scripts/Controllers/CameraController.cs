@@ -6,11 +6,13 @@ public class CameraController : MonoBehaviour
     public PlayerController _player;
 
     [SerializeField] private float _distance = 5f;
-    [SerializeField] private float _followSpeed = 10f;
 
     [SerializeField] private float _lookSensitivity = 0.15f;
     [SerializeField] private float _minPitch = -80f;
     [SerializeField] private float _maxPitch = 80f;
+
+    [Header("Follow")]
+    [SerializeField] private float _followDamping = 20f;
 
     private InputAction _look;
 
@@ -75,11 +77,17 @@ public class CameraController : MonoBehaviour
             _player.transform.position +
             rotation * Vector3.back * _distance;
 
+        float t =
+            1f -
+            Mathf.Exp(
+                -_followDamping * Time.deltaTime
+            );
+
         transform.position =
-            Vector3.MoveTowards(
+            Vector3.Lerp(
                 transform.position,
                 targetPosition,
-                _followSpeed * Time.deltaTime
+                t
             );
 
         Vector3 lookDirection =
