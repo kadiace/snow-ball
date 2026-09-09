@@ -33,6 +33,9 @@ public class PlayerController : MonoBehaviour
     [Header("Jump")]
     [SerializeField] private float _jumpForce = 8f;
 
+    [Header("Body Visual")]
+    [SerializeField] private float _bodyRadius = 0.5f;
+
 
     private void Awake()
     {
@@ -62,10 +65,10 @@ public class PlayerController : MonoBehaviour
         _moveInput =
             _inputActions.Player.Move.ReadValue<Vector2>();
 
-        UpdateBodyVisual();
-
         if (_characterController.enabled)
             MoveCharacter(_moveInput);
+
+        UpdateBodyVisual();
     }
 
     private void OnJumpPerformed(InputAction.CallbackContext context)
@@ -163,35 +166,34 @@ public class PlayerController : MonoBehaviour
 
     private void UpdateBodyVisual()
     {
-        if (_moveInput.sqrMagnitude < 0.001f)
-        {
+        Vector3 moveVelocity = new Vector3(
+            _velocity.x,
+            0f,
+            _velocity.z
+        );
+
+        if (moveVelocity.sqrMagnitude < 0.001f)
             return;
-        }
 
-        Vector3 cameraForward = _camera.transform.forward;
-        Vector3 cameraRight = _camera.transform.right;
+        Vector3 moveDirection =
+            moveVelocity.normalized;
 
-        cameraForward.y = 0f;
-        cameraRight.y = 0f;
+        Vector3 rotationAxis =
+            Vector3.Cross(
+                Vector3.up,
+                moveDirection
+            );
 
-        cameraForward.Normalize();
-        cameraRight.Normalize();
+        float distance =
+            moveVelocity.magnitude * Time.deltaTime;
 
-        Vector3 direction =
-            cameraForward * _moveInput.y +
-            cameraRight * _moveInput.x;
-
-        if (direction.sqrMagnitude < 0.001f)
-        {
-            return;
-        }
-
-        direction.Normalize();
+        float rotationAngle =
+            distance / _bodyRadius * Mathf.Rad2Deg;
 
         _body.rotation =
-            Quaternion.LookRotation(
-                direction,
-                Vector3.up
-            );
+            Quaternion.AngleAxis(
+                rotationAngle,
+                rotationAxis
+            ) * _body.rotation;
     }
 }
