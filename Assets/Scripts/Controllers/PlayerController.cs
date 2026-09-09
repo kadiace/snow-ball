@@ -11,9 +11,11 @@ public class PlayerController : MonoBehaviour
     private CameraController _camera;
 
     private Vector2 _moveInput;
-    private Vector3 _velocity;
+    private Vector3 _moveVelocity;
+    private Vector3 _gravityVelocity;
 
     private readonly Vector3 _gravityDir = Vector3.down;
+    private Vector3 _groundNormal = Vector3.up;
 
 
     [Header("Move")]
@@ -69,6 +71,8 @@ public class PlayerController : MonoBehaviour
             MoveCharacter(_moveInput);
 
         UpdateBodyVisual();
+
+        Debug.Log($"{_groundNormal}");
     }
 
     private void OnJumpPerformed(InputAction.CallbackContext context)
@@ -81,7 +85,7 @@ public class PlayerController : MonoBehaviour
 
     private void Jump()
     {
-        _velocity.y = _jumpForce;
+        _gravityVelocity.y = _jumpForce;
     }
 
     private void MoveCharacter(Vector2 moveInput)
@@ -107,35 +111,55 @@ public class PlayerController : MonoBehaviour
         Vector3 targetVelocity =
             moveDirection * _moveSpeed;
 
-        Vector3 horizontalVelocity =
-            new Vector3(
-                _velocity.x,
-                0f,
-                _velocity.z
-            );
-
-        horizontalVelocity = Vector3.MoveTowards(
-            horizontalVelocity,
+        _moveVelocity = Vector3.MoveTowards(
+            _moveVelocity,
             targetVelocity,
             _moveAcceleration * Time.deltaTime
         );
 
-        _velocity.x = horizontalVelocity.x;
-        _velocity.z = horizontalVelocity.z;
-
         ApplyGravity();
 
+        Vector3 finalVelocity =
+            _moveVelocity +
+            _gravityVelocity;
+
         _characterController.Move(
-            _velocity * Time.deltaTime
+            finalVelocity * Time.deltaTime
         );
     }
 
     private void ApplyGravity()
     {
-        _velocity +=
-            _gravityDir *
-            _gravityAcceleration *
-            Time.deltaTime;
+        bool movingAgainstGravity =
+            Vector3.Dot(
+                _gravityVelocity,
+                _gravityDir
+            ) < 0f;
+
+        if (_characterController.isGrounded &&
+    !movingAgainstGravity)
+        {
+            _gravityVelocity =
+            Vector3.ProjectOnPlane(
+                _gravityVelocity,
+                _groundNormal
+            );
+
+            Vector3 slopeAcceleration =
+                Vector3.ProjectOnPlane(
+                    _gravityDir * _gravityAcceleration,
+                    _groundNormal
+                );
+
+            _gravityVelocity +=
+                slopeAcceleration *
+                Time.deltaTime;
+        }
+        else
+            _gravityVelocity +=
+                _gravityDir *
+                _gravityAcceleration *
+                Time.deltaTime;
     }
 
     private bool IsGrounded()
@@ -166,26 +190,30 @@ public class PlayerController : MonoBehaviour
 
     private void UpdateBodyVisual()
     {
-        Vector3 moveVelocity = new Vector3(
-            _velocity.x,
-            0f,
-            _velocity.z
-        );
+        Vector3 totalVelocity =
+            _moveVelocity +
+            _gravityVelocity;
 
-        if (moveVelocity.sqrMagnitude < 0.001f)
+        Vector3 surfaceVelocity =
+            Vector3.ProjectOnPlane(
+                totalVelocity,
+                _groundNormal
+            );
+
+        if (surfaceVelocity.sqrMagnitude < 0.001f)
             return;
 
         Vector3 moveDirection =
-            moveVelocity.normalized;
+            surfaceVelocity.normalized;
 
         Vector3 rotationAxis =
             Vector3.Cross(
-                Vector3.up,
+                _groundNormal,
                 moveDirection
             );
 
         float distance =
-            moveVelocity.magnitude * Time.deltaTime;
+            surfaceVelocity.magnitude * Time.deltaTime;
 
         float rotationAngle =
             distance / _bodyRadius * Mathf.Rad2Deg;
@@ -195,5 +223,19 @@ public class PlayerController : MonoBehaviour
                 rotationAngle,
                 rotationAxis
             ) * _body.rotation;
+    }
+
+    private void OnControllerColliderHit(ControllerColliderHit hit)
+    {
+        if (((1 << hit.gameObject.layer) & _groundLayer) == 0)
+            return;
+
+        float groundDot =
+            Vector3.Dot(hit.normal, -_gravityDir);
+
+        if (groundDot > 0f)
+        {
+            _groundNormal = hit.normal;
+        }
     }
 }
