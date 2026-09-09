@@ -6,94 +6,93 @@ public class CameraController : MonoBehaviour
     public PlayerController _player;
 
     [SerializeField] private float _distance = 5f;
+    [SerializeField] private float _followSpeed = 10f;
+
     [SerializeField] private float _lookSensitivity = 0.15f;
     [SerializeField] private float _minPitch = -80f;
     [SerializeField] private float _maxPitch = 80f;
 
     private InputAction _look;
 
-    private Vector3 _forward;
-    private Vector3 _previousUp;
-
+    private float _yaw;
     private float _pitch;
 
     void Awake()
     {
         _look = InputSystem.actions.FindAction("Look");
 
-        GameObject playerObject = Resources.Load<GameObject>($"Prefabs/Player");
+        GameObject playerObject =
+            Resources.Load<GameObject>("Prefabs/Player");
 
-        _player = Instantiate(playerObject).GetComponent<PlayerController>();
+        _player =
+            Instantiate(playerObject)
+            .GetComponent<PlayerController>();
 
-        Vector3 up = _player.GravityDir;
+        Vector3 angles = transform.eulerAngles;
 
-        _forward = Vector3.ProjectOnPlane(transform.forward, up);
+        _yaw = angles.y;
+        _pitch = angles.x;
 
-        if (_forward.sqrMagnitude < 0.001f)
-        {
-            _forward =
-                Vector3.ProjectOnPlane(_player.transform.forward, up);
-        }
+        if (_pitch > 180f)
+            _pitch -= 360f;
     }
 
     void LateUpdate()
     {
-        Vector3 up = -_player.GravityDir;
-
-        Quaternion gravityRotation =
-            Quaternion.FromToRotation(_previousUp, up);
-
-        _forward = gravityRotation * _forward;
-
-        Vector2 lookInput = _look.ReadValue<Vector2>();
-
-        ApplyYaw(lookInput.x, up);
-        ApplyPitch(lookInput.y, up);
-
-        transform.position =
-            _player.transform.position - _forward * _distance;
-
-        transform.rotation =
-            Quaternion.LookRotation(_forward, up);
-
-        _previousUp = up;
+        UpdateLook();
+        FollowPlayer();
     }
 
-    private void ApplyYaw(float input, Vector3 up)
+    private void UpdateLook()
     {
-        Quaternion rotation =
-            Quaternion.AngleAxis(
-                input * _lookSensitivity,
-                up
-            );
+        Vector2 lookInput =
+            _look.ReadValue<Vector2>();
 
-        _forward = rotation * _forward;
-    }
+        _yaw +=
+            lookInput.x * _lookSensitivity;
 
-    private void ApplyPitch(float input, Vector3 up)
-    {
-        float pitchDelta =
-            -input * _lookSensitivity;
+        _pitch -=
+            lookInput.y * _lookSensitivity;
 
-        float targetPitch =
+        _pitch =
             Mathf.Clamp(
-                _pitch + pitchDelta,
+                _pitch,
                 _minPitch,
                 _maxPitch
             );
+    }
 
-        pitchDelta = targetPitch - _pitch;
-        _pitch = targetPitch;
-
-        Vector3 right =
-            Vector3.Cross(up, _forward).normalized;
-
+    private void FollowPlayer()
+    {
         Quaternion rotation =
-            Quaternion.AngleAxis(
-                pitchDelta,
-                right
+            Quaternion.Euler(
+                _pitch,
+                _yaw,
+                0f
             );
 
-        _forward = rotation * _forward;
+        Vector3 targetPosition =
+            _player.transform.position +
+            rotation * Vector3.back * _distance;
+
+        transform.position =
+            Vector3.MoveTowards(
+                transform.position,
+                targetPosition,
+                _followSpeed * Time.deltaTime
+            );
+
+        Vector3 lookDirection =
+            _player.transform.position -
+            transform.position;
+
+        if (lookDirection.sqrMagnitude > 0.001f)
+        {
+            transform.rotation =
+                Quaternion.LookRotation(
+                    lookDirection,
+                    Vector3.up
+                );
+        }
     }
 }
