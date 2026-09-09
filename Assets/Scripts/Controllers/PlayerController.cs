@@ -16,18 +16,21 @@ public class PlayerController : MonoBehaviour
     private readonly Vector3 _gravityDir = Vector3.down;
 
 
-    [Tooltip("Move")]
+    [Header("Move")]
     [SerializeField] private float _moveSpeed = 5f;
     [SerializeField] private float _moveAcceleration = 15f;
 
-    [Tooltip("Gravity")]
+    [Header("Gravity")]
     [SerializeField] private float _gravityAcceleration = 9.8f;
 
-    [Tooltip("Check Ground")]
-    [SerializeField] private LayerMask _groundLayer;
-    [SerializeField] private float _groundCheckDistance = 0.1f;
+    [SerializeField] private float _groundCheckOffset = 0.05f;
 
-    [Tooltip("Jump")]
+    [Header("Check Ground")]
+    [SerializeField] private LayerMask _groundLayer;
+    [SerializeField] private float _groundCheckDistance = 0.3f;
+    [SerializeField] private float _maxGroundAngle = 80f;
+
+    [Header("Jump")]
     [SerializeField] private float _jumpForce = 8f;
 
 
@@ -62,9 +65,7 @@ public class PlayerController : MonoBehaviour
         UpdateBodyVisual();
 
         if (_characterController.enabled)
-        {
             MoveCharacter(_moveInput);
-        }
     }
 
     private void OnJumpPerformed(InputAction.CallbackContext context)
@@ -85,7 +86,6 @@ public class PlayerController : MonoBehaviour
         Vector3 cameraForward = _camera.transform.forward;
         Vector3 cameraRight = _camera.transform.right;
 
-        // 수평 이동만 사용
         cameraForward.y = 0f;
         cameraRight.y = 0f;
 
@@ -101,11 +101,9 @@ public class PlayerController : MonoBehaviour
             moveDirection.Normalize();
         }
 
-        // 목표 수평 속도
         Vector3 targetVelocity =
             moveDirection * _moveSpeed;
 
-        // 현재 수평 속도
         Vector3 horizontalVelocity =
             new Vector3(
                 _velocity.x,
@@ -113,7 +111,6 @@ public class PlayerController : MonoBehaviour
                 _velocity.z
             );
 
-        // 가속도를 적용해서 목표 속도까지 접근
         horizontalVelocity = Vector3.MoveTowards(
             horizontalVelocity,
             targetVelocity,
@@ -132,13 +129,6 @@ public class PlayerController : MonoBehaviour
 
     private void ApplyGravity()
     {
-        if (IsGrounded() && _velocity.y < 0f)
-        {
-            // 땅과 계속 붙어 있도록 아주 약한 하강 속도 유지
-            _velocity.y = -1f;
-            return;
-        }
-
         _velocity +=
             _gravityDir *
             _gravityAcceleration *
@@ -148,27 +138,27 @@ public class PlayerController : MonoBehaviour
     private bool IsGrounded()
     {
         Vector3 center =
-            transform.TransformPoint(
-                _characterController.center
-            );
+    transform.TransformPoint(_characterController.center);
 
-        float bottom =
-            _characterController.height * 0.5f
-            - _characterController.radius;
+        float radius =
+            _characterController.radius * 0.9f;
 
-        Vector3 sphereCenter =
-            center +
-            Vector3.down * bottom;
-
-        return Physics.SphereCast(
-            sphereCenter,
-            _characterController.radius * 0.9f,
+        if (Physics.SphereCast(
+            center,
+            radius,
             Vector3.down,
-            out _,
-            _groundCheckDistance,
+            out RaycastHit hit,
+            radius + _groundCheckDistance,
             _groundLayer,
-            QueryTriggerInteraction.Ignore
-        );
+            QueryTriggerInteraction.Ignore))
+        {
+            float angle =
+                Vector3.Angle(hit.normal, Vector3.up);
+
+            return angle <= _maxGroundAngle;
+        }
+
+        return false;
     }
 
     private void UpdateBodyVisual()

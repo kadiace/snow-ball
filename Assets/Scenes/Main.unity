@@ -129,7 +129,7 @@ GameObject:
   m_Component:
   - component: {fileID: 138242918}
   - component: {fileID: 138242919}
-  m_Layer: 3
+  m_Layer: 0
   m_Name: RandomNoiseTerrain
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -322,6 +322,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CameraController
   _player: {fileID: 0}
   _distance: 5
+  _followSpeed: 10
   _lookSensitivity: 0.15
   _minPitch: -80
   _maxPitch: 80

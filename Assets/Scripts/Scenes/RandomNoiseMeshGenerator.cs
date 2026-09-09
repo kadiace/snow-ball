@@ -18,6 +18,9 @@ public class RandomNoiseMeshGenerator : MonoBehaviour
     [Header("Visual")]
     [SerializeField] private Material _material;
 
+    [Header("Layer")]
+    [SerializeField] private LayerMask _groundLayer;
+
     private void Start()
     {
         float offsetX = Random.Range(0f, 10000f);
@@ -50,7 +53,10 @@ public class RandomNoiseMeshGenerator : MonoBehaviour
         float offsetZ,
         bool flipTriangles)
     {
-        GameObject terrainObject = new GameObject(objectName);
+        GameObject terrainObject = new GameObject(objectName)
+        {
+            layer = LayerMask.NameToLayer("Ground")
+        };
         terrainObject.transform.SetParent(transform);
         terrainObject.transform.localPosition = Vector3.zero;
 
