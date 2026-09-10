@@ -72,17 +72,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
   _moveSpeed: 10
-  _moveAcceleration: 15
   _moveResponseTime: 0.2
-  _gravityAcceleration: 9.8
+  _gravityAcceleration: 30
   _groundStickSpeed: 2
   _groundLayer:
     serializedVersion: 2
     m_Bits: 8
-  _groundCheckOffset: 0.05
-  _groundCheckDistance: 0.3
+  _groundCheckOffset: 0.03
   _maxGroundAngle: 80
   _jumpForce: 8
+  _airMoveAcceleration: 3
   _bodyRadius: 0.5
 --- !u!1 &1738122062725544893
 GameObject:

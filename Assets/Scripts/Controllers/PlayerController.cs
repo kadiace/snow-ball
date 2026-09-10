@@ -11,17 +11,21 @@ public class PlayerController : MonoBehaviour
     private CameraController _camera;
 
     private Vector2 _moveInput;
-    private Vector3 _moveVelocity;
-    private Vector3 _gravityVelocity;
+    private Vector3 _rollControlVelocity;
     private Vector3 _slopeVelocity;
 
+    private Vector3 _airVelocity;
+
+    private Vector3 _gravityVelocity;
+    private Vector3 _groundStickVelocity;
+    private bool _isGrounded;
+    private float _groundCheckIgnoreTimer;
     private readonly Vector3 _gravityDir = Vector3.down;
     private Vector3 _groundNormal = Vector3.up;
 
 
     [Header("Move")]
     [SerializeField] private float _moveSpeed = 5f;
-    [SerializeField] private float _moveAcceleration = 15f;
     [SerializeField] private float _moveResponseTime = 0.2f;
 
     [Header("Gravity")]
@@ -30,12 +34,14 @@ public class PlayerController : MonoBehaviour
 
     [Header("Check Ground")]
     [SerializeField] private LayerMask _groundLayer;
-    [SerializeField] private float _groundCheckOffset = 0.05f;
-    [SerializeField] private float _groundCheckDistance = 0.3f;
-    [SerializeField] private float _maxGroundAngle = 80f;
+    [SerializeField] private float _groundCheckOffset = 0.01f;
+    [SerializeField] private float _maxGroundAngle = 30f;
 
     [Header("Jump")]
     [SerializeField] private float _jumpForce = 8f;
+
+    [Header("Air Move")]
+    [SerializeField] private float _airMoveAcceleration = 15f;
 
     [Header("Body Visual")]
     [SerializeField] private float _bodyRadius = 0.5f;
@@ -53,6 +59,12 @@ public class PlayerController : MonoBehaviour
         _camera = Camera.main.GetComponent<CameraController>();
     }
 
+    private void OnDestroy()
+    {
+        _inputActions.Player.Jump.performed -= OnJumpPerformed;
+        _inputActions.Dispose();
+    }
+
     private void OnEnable()
     {
         _inputActions.Player.Enable();
@@ -65,27 +77,93 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
+        if (_groundCheckIgnoreTimer > 0f)
+            _groundCheckIgnoreTimer -= Time.deltaTime;
+
+        bool wasGrounded = _isGrounded;
+        bool isGrounded = IsGrounded();
+        _isGrounded = isGrounded;
+
         _moveInput =
             _inputActions.Player.Move.ReadValue<Vector2>();
 
-        if (_characterController.enabled)
-            MoveCharacter(_moveInput);
+        MoveCharacter(_moveInput, isGrounded);
 
-        UpdateBodyVisual();
+        UpdateBodyVisual(isGrounded);
+
+        Debug.Log($"Ground: {isGrounded}\n Ground Normal: {_groundNormal}\nJumpTimer:{_groundCheckIgnoreTimer}");
     }
 
     private void OnJumpPerformed(InputAction.CallbackContext context)
     {
-        if (IsGrounded())
+        if (_isGrounded)
             Jump();
+    }
+
+    private bool IsGrounded()
+    {
+        if (_groundCheckIgnoreTimer > 0f)
+            return false;
+
+        Vector3 center = transform.TransformPoint(_characterController.center);
+
+        float controllerRadius = _characterController.radius;
+        float checkRadius = controllerRadius * 0.9f;
+
+        float castDistance = controllerRadius - checkRadius +
+            _groundCheckOffset;
+
+        if (Physics.SphereCast(
+            center,
+            checkRadius,
+            Vector3.down,
+            out RaycastHit hit,
+            castDistance,
+            _groundLayer,
+            QueryTriggerInteraction.Ignore))
+        {
+            float angle = Vector3.Angle(hit.normal, Vector3.up);
+
+            if (angle <= _maxGroundAngle)
+            {
+                _groundNormal = hit.normal;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void Jump()
     {
-        _gravityVelocity.y = _jumpForce;
+        _slopeVelocity =
+            Vector3.ProjectOnPlane(
+                _slopeVelocity,
+                Vector3.up
+            );
+
+        _gravityVelocity =
+            Vector3.up * _jumpForce;
+
+        _groundCheckIgnoreTimer = 0.1f;
     }
 
-    private void MoveCharacter(Vector2 moveInput)
+    private void MoveCharacter(Vector2 moveInput, bool grounded)
+    {
+        Vector3 worldMoveInput = GetWorldMoveInput(moveInput);
+
+        if (grounded)
+            Roll(worldMoveInput);
+        else
+            AirMove(worldMoveInput);
+
+        Vector3 finalVelocity = _rollControlVelocity + _slopeVelocity
+            + _groundStickVelocity + _airVelocity + _gravityVelocity;
+
+        _characterController.Move(finalVelocity * Time.deltaTime);
+    }
+
+    private Vector3 GetWorldMoveInput(Vector2 moveInput)
     {
         Vector3 cameraForward = _camera.transform.forward;
         Vector3 cameraRight = _camera.transform.right;
@@ -96,126 +174,229 @@ public class PlayerController : MonoBehaviour
         cameraForward.Normalize();
         cameraRight.Normalize();
 
-        Vector3 moveDirection =
-            cameraForward * moveInput.y +
+        Vector3 worldMoveInput = cameraForward * moveInput.y +
             cameraRight * moveInput.x;
 
-        bool hasMoveInput =
-            moveDirection.sqrMagnitude > 0.001f;
-
-        if (hasMoveInput)
-            moveDirection.Normalize();
-
-        bool grounded = IsGrounded();
-
-        if (hasMoveInput)
-        {
-            if (grounded)
-            {
-                moveDirection = Vector3.ProjectOnPlane(
-                    moveDirection, _groundNormal).normalized;
-
-                Vector3 surfaceVelocity = Vector3.ProjectOnPlane(
-                    _moveVelocity, _groundNormal);
-
-                Vector3 targetVelocity = moveDirection * _moveSpeed;
-
-                Vector3 acceleration = (targetVelocity - surfaceVelocity) /
-                    Mathf.Max(_moveResponseTime, 0.001f);
-
-                _moveVelocity = surfaceVelocity +
-                    acceleration * Time.deltaTime;
-            }
-            else
-            {
-                float currentSpeedInInputDirection = Vector3.Dot(
-                    _moveVelocity, moveDirection);
-
-                float missingSpeed = Mathf.Max(0f,
-                    _moveSpeed - currentSpeedInInputDirection);
-
-                Vector3 acceleration = moveDirection *
-                    (missingSpeed / Mathf.Max(_moveResponseTime, 0.001f));
-
-                _moveVelocity += acceleration * Time.deltaTime;
-            }
-        }
-
-        ApplyGravity(grounded, moveInput, moveDirection);
-
-        Vector3 finalVelocity = _moveVelocity + _gravityVelocity
-            + _slopeVelocity;
-
-        _characterController.Move(finalVelocity * Time.deltaTime);
+        return Vector3.ClampMagnitude(worldMoveInput, 1f);
     }
 
-    private void ApplyGravity(
-        bool grounded,
-        Vector2 moveInput,
-        Vector3 moveDirection)
+    private void Roll(Vector3 worldMoveInput)
     {
-        bool movingAgainstGravity = Vector3.Dot(
-            _gravityVelocity, _gravityDir) < 0f;
+        _gravityVelocity = Vector3.zero;
 
-        if (!grounded || movingAgainstGravity)
+        TransferAirVelocityToRoll();
+
+        Vector3 groundMoveDirection =
+            GetGroundMoveDirection(worldMoveInput);
+
+        bool hasMoveInput =
+            worldMoveInput.sqrMagnitude > 0.001f;
+
+        UpdateSlopeVelocity(
+            groundMoveDirection,
+            worldMoveInput.sqrMagnitude > 0.001f
+        );
+
+        UpdateGroundMoveVelocity(
+            groundMoveDirection,
+            worldMoveInput.magnitude
+        );
+
+        UpdateGroundStickVelocity();
+    }
+
+    private void TransferAirVelocityToRoll()
+    {
+        if (_airVelocity.sqrMagnitude <= 0.001f)
+            return;
+
+        _rollControlVelocity +=
+            Vector3.ProjectOnPlane(
+                _airVelocity,
+                _groundNormal
+            );
+
+        _airVelocity = Vector3.zero;
+    }
+
+    private Vector3 GetGroundMoveDirection(Vector3 worldMoveInput)
+    {
+        Vector3 groundMoveDirection =
+            Vector3.ProjectOnPlane(
+                worldMoveInput,
+                _groundNormal
+            );
+
+        if (groundMoveDirection.sqrMagnitude <= 0.001f)
+            return Vector3.zero;
+
+        return groundMoveDirection.normalized;
+    }
+
+    private void UpdateSlopeVelocity(
+        Vector3 groundMoveDirection,
+        bool hasMoveInput)
+    {
+        _slopeVelocity =
+            Vector3.ProjectOnPlane(
+                _slopeVelocity,
+                _groundNormal
+            );
+
+        Vector3 gravity =
+            _gravityDir * _gravityAcceleration;
+
+        Vector3 slopeGravity =
+            Vector3.ProjectOnPlane(
+                gravity,
+                _groundNormal
+            );
+
+        bool isDownhillInput =
+            Vector3.Dot(
+                groundMoveDirection,
+                slopeGravity
+            ) >= 0f;
+
+        if (!hasMoveInput || isDownhillInput)
         {
-            _gravityVelocity += _gravityDir *
-                _gravityAcceleration *
-                Time.deltaTime;
+            _slopeVelocity +=
+                slopeGravity * Time.deltaTime;
+        }
+    }
 
-            _slopeVelocity = Vector3.zero;
+    private void UpdateGroundMoveVelocity(
+        Vector3 groundMoveDirection,
+        float inputMagnitude)
+    {
+        inputMagnitude =
+            Mathf.Clamp01(inputMagnitude);
+
+        if (inputMagnitude <= 0.001f)
+        {
+            float _responseSpeed =
+                _moveSpeed / _moveResponseTime;
+
+            _rollControlVelocity =
+                Vector3.MoveTowards(
+                    _rollControlVelocity,
+                    Vector3.zero,
+                    _responseSpeed * Time.deltaTime
+                );
 
             return;
         }
 
-        _gravityVelocity = _gravityDir * _groundStickSpeed;
+        float targetSpeed =
+            _moveSpeed * inputMagnitude;
 
-        Vector3 slopeGravity = Vector3.ProjectOnPlane(
-            _gravityDir * _gravityAcceleration, _groundNormal);
+        Vector3 currentRollVelocity =
+            _rollControlVelocity +
+            _slopeVelocity;
 
-        bool hasMoveInput = moveInput.sqrMagnitude > 0.001f;
+        float currentSpeed =
+            Vector3.Dot(
+                currentRollVelocity,
+                groundMoveDirection
+            );
 
-        bool shouldApplySlopeGravity = !hasMoveInput;
+        if (currentSpeed >= targetSpeed)
+            return;
 
-        if (hasMoveInput && slopeGravity.sqrMagnitude > 0.001f)
-        {
-            Vector3 slopeDirection = slopeGravity.normalized;
+        float remainingSpeed =
+            targetSpeed - currentSpeed;
 
-            float inputDot = Vector3.Dot(
-                moveDirection, slopeDirection);
+        float responseSpeed =
+            _moveSpeed / _moveResponseTime;
 
-            shouldApplySlopeGravity = inputDot > 0.001f;
-        }
+        float addedSpeed =
+            Mathf.Min(
+                responseSpeed * Time.deltaTime,
+                remainingSpeed
+            );
 
-        if (shouldApplySlopeGravity)
-            _slopeVelocity += slopeGravity * Time.deltaTime;
-        else
-            _slopeVelocity = Vector3.zero;
+        _rollControlVelocity +=
+            groundMoveDirection * addedSpeed;
     }
 
-    private bool IsGrounded()
+    private void UpdateGroundStickVelocity()
     {
-        Vector3 center = transform.TransformPoint(_characterController.center);
-
-        float radius = _characterController.radius * 0.9f;
-
-        if (Physics.SphereCast(
-            center, radius, Vector3.down, out RaycastHit hit,
-            radius + _groundCheckDistance, _groundLayer, QueryTriggerInteraction.Ignore))
-        {
-            float angle = Vector3.Angle(hit.normal, Vector3.up);
-
-            return angle <= _maxGroundAngle;
-        }
-
-        return false;
+        _groundStickVelocity =
+            -_groundNormal * _groundStickSpeed;
     }
 
-    private void UpdateBodyVisual()
+    private void AirMove(Vector3 worldMoveInput)
     {
-        Vector3 totalVelocity = _moveVelocity + _gravityVelocity;
+        TransferGroundVelocityToAir();
 
-        Vector3 rotationUp = IsGrounded() ? _groundNormal : Vector3.up;
+        UpdateAirMoveVelocity(worldMoveInput);
+        UpdateGravityVelocity();
+    }
+
+    private void TransferGroundVelocityToAir()
+    {
+        _groundStickVelocity = Vector3.zero;
+        _airVelocity += _rollControlVelocity + _slopeVelocity;
+        _rollControlVelocity = Vector3.zero;
+        _slopeVelocity = Vector3.zero;
+    }
+
+    private void UpdateAirMoveVelocity(Vector3 worldMoveInput)
+    {
+        float inputMagnitude =
+            Mathf.Clamp01(worldMoveInput.magnitude);
+
+        if (inputMagnitude <= 0f)
+            return;
+
+        Vector3 moveDirection =
+            worldMoveInput.normalized;
+
+        float targetSpeed =
+            _moveSpeed * inputMagnitude;
+
+        float currentSpeed =
+            Vector3.Dot(
+                _airVelocity,
+                moveDirection
+            );
+
+        float remainingSpeed =
+            targetSpeed - currentSpeed;
+
+        if (remainingSpeed <= 0f)
+            return;
+
+        float accelerationSpeed =
+            _airMoveAcceleration *
+            inputMagnitude *
+            Time.deltaTime;
+
+        accelerationSpeed =
+            Mathf.Min(
+                accelerationSpeed,
+                remainingSpeed
+            );
+
+        _airVelocity +=
+            moveDirection * accelerationSpeed;
+    }
+
+    private void UpdateGravityVelocity()
+    {
+        Vector3 gravity =
+            _gravityDir * _gravityAcceleration;
+
+        _gravityVelocity +=
+            gravity * Time.deltaTime;
+    }
+
+    private void UpdateBodyVisual(bool grounded)
+    {
+        Vector3 totalVelocity = _rollControlVelocity + _slopeVelocity
+            + _groundStickVelocity + _airVelocity + _gravityVelocity; ;
+
+        Vector3 rotationUp = grounded ? _groundNormal : Vector3.up;
 
         Vector3 rollingVelocity = Vector3.ProjectOnPlane(totalVelocity, rotationUp);
 
