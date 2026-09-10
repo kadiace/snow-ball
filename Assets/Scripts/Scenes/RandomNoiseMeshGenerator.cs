@@ -55,7 +55,7 @@ public class RandomNoiseMeshGenerator : MonoBehaviour
     {
         GameObject terrainObject = new GameObject(objectName)
         {
-            layer = LayerMask.NameToLayer("Ground")
+            layer = _groundLayer
         };
         terrainObject.transform.SetParent(transform);
         terrainObject.transform.localPosition = Vector3.zero;

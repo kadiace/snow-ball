@@ -415,7 +415,7 @@ public class PlayerController : MonoBehaviour
 
     private void OnControllerColliderHit(ControllerColliderHit hit)
     {
-        if (((1 << hit.gameObject.layer) & _groundLayer) == 0)
+        if ((_groundLayer.value & (1 << hit.gameObject.layer)) != 0)
             return;
 
         float groundDot = Vector3.Dot(hit.normal, -_gravityDir);

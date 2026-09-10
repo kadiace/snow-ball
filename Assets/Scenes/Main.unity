@@ -163,13 +163,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ec1bfc9b196122444af2824c37be9c55, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RandomNoiseMeshGenerator
-  _areaSize: 5000
-  _resolution: 100
+  _areaSize: 500
+  _resolution: 50
   _upperHeight: 100
   _lowerHeight: -100
   _depth: 100
   _scale: 100
   _material: {fileID: 2100000, guid: 57fc2c0933101274b99e32d0ae3c3e29, type: 2}
+  _groundLayer:
+    serializedVersion: 2
+    m_Bits: 8
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -322,10 +325,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CameraController
   _player: {fileID: 0}
   _distance: 5
-  _followSpeed: 10
   _lookSensitivity: 0.15
   _minPitch: -80
   _maxPitch: 80
+  _followDamping: 20
 --- !u!1 &410087039
 GameObject:
   m_ObjectHideFlags: 0
